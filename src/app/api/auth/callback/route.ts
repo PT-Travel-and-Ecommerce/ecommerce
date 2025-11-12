@@ -2,6 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifySSOToken } from '@/lib/auth';
 
+// Helper function to determine if request is over HTTPS
+function isSecureConnection(request: NextRequest): boolean {
+  // Check if explicitly set via environment variable
+  if (process.env.FORCE_SECURE_COOKIES === 'true') {
+    return true;
+  }
+
+  // Check X-Forwarded-Proto header (set by reverse proxies like nginx)
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  if (forwardedProto === 'https') {
+    return true;
+  }
+
+  // Check the request URL protocol
+  const protocol = request.nextUrl.protocol;
+  if (protocol === 'https:') {
+    return true;
+  }
+
+  // Default to false for HTTP connections
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -35,7 +58,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL(redirectUrl, request.url));
     response.cookies.set('sso_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureConnection(request),
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,
     });
